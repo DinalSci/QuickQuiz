@@ -1,17 +1,16 @@
 import os
 import asyncio
-from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File
+import uuid
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler
 from dotenv import load_dotenv
 
-from app.database import init_db, SessionLocal, Question
 from app.bot import start_command
 from app.pdf_parser import extract_text_from_pdf, parse_mcqs_with_gemini
 
@@ -19,7 +18,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 WEBHOOK_URL = f"{os.getenv('WEBAPP_URL')}/api/webhook"
 
-app = FastAPI(title="PDF to Telegram Quiz WebApp")
+app = FastAPI(title="PDF to Telegram Quiz WebApp (Stateless)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,19 +53,8 @@ async def get_ptb_app():
         _bot_initialized = True
     return ptb
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-
 class PublishRequest(BaseModel):
-    question_id: int
+    question_id: Optional[str] = None
     correct_option_id: int
     question_text: str
     options: List[str]
@@ -76,17 +64,12 @@ class PublishRequest(BaseModel):
 def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.get("/api/questions")
-def get_questions(db: Session = Depends(get_db)):
-    questions = db.query(Question).filter(Question.is_published == False).all()
-    return questions
-
 @app.post("/api/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Save temporarily
+    # Save temporarily (Vercel allows writing to /tmp)
     os.makedirs("/tmp/uploads", exist_ok=True)
     file_path = f"/tmp/uploads/{file.filename}"
     
@@ -98,32 +81,24 @@ async def upload_pdf(file: UploadFile = File(...), db: Session = Depends(get_db)
         parsed_questions = parse_mcqs_with_gemini(raw_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
-        
+    finally:
+        # Clean up temp file
+        try:
+            os.remove(file_path)
+        except:
+            pass
+            
     if not parsed_questions:
         raise HTTPException(status_code=400, detail="Failed to extract questions. Please verify PDF format.")
         
-    # Save to database
+    # Assign unique IDs to questions so the frontend can track them
     for q in parsed_questions:
-        db_item = Question(
-            pdf_name=file.filename,
-            question_text=q["question_text"],
-            options=q["options"],
-            correct_option_id=q.get("correct_option_id"),
-            explanation=q.get("explanation", "")
-        )
-        db.add(db_item)
-    db.commit()
-    
-    # Clean up temp file
-    try:
-        os.remove(file_path)
-    except:
-        pass
+        q['id'] = str(uuid.uuid4())
         
-    return {"status": "success", "count": len(parsed_questions)}
+    return {"status": "success", "count": len(parsed_questions), "questions": parsed_questions}
 
 @app.post("/api/publish-quiz")
-async def publish_quiz(req: PublishRequest, db: Session = Depends(get_db)):
+async def publish_quiz(req: PublishRequest):
     target_chat = req.target_chat_id or os.getenv("TARGET_CHAT_ID")
     if not target_chat:
         raise HTTPException(status_code=400, detail="Target Chat ID is required.")
@@ -141,13 +116,6 @@ async def publish_quiz(req: PublishRequest, db: Session = Depends(get_db)):
             correct_option_id=req.correct_option_id,
             is_anonymous=True
         )
-
-        # Mark question as published in DB
-        q_item = db.query(Question).filter(Question.id == req.question_id).first()
-        if q_item:
-            q_item.is_published = True
-            q_item.correct_option_id = req.correct_option_id
-            db.commit()
 
         return {"status": "success", "message_id": poll_msg.message_id}
 
