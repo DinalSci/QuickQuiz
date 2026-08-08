@@ -1,5 +1,6 @@
+let currentQuestions = [];
+
 document.addEventListener("DOMContentLoaded", () => {
-  fetchQuestions();
   setupDragAndDrop();
 });
 
@@ -68,13 +69,16 @@ async function handleFiles(files) {
       statusEl.style.color = "var(--success-color)";
       statusEl.querySelector(".spinner").style.display = "none";
       
+      currentQuestions = result.questions;
+      
       setTimeout(() => {
         dropZone.style.display = "flex";
         statusEl.style.display = "none";
         statusEl.style.color = "#e2e8f0";
         statusEl.querySelector(".spinner").style.display = "block";
         document.getElementById("pdf-upload").value = "";
-        fetchQuestions();
+        
+        renderQuestions();
       }, 2000);
     } else {
       throw new Error(result.detail || "Failed to process PDF.");
@@ -94,34 +98,23 @@ async function handleFiles(files) {
   }
 }
 
-
-async function fetchQuestions() {
-  const loadingEl = document.getElementById("loading");
+function renderQuestions() {
   const listEl = document.getElementById("questions-list");
   const emptyEl = document.getElementById("empty-state");
 
   listEl.innerHTML = "";
-  emptyEl.style.display = "none";
-  loadingEl.style.display = "flex";
-
-  try {
-    const res = await fetch("/api/questions");
-    const questions = await res.json();
-
-    loadingEl.style.display = "none";
-
-    if (!questions || questions.length === 0) {
-      emptyEl.style.display = "block";
-      return;
-    }
-
-    questions.forEach((q, index) => {
-      const card = createQuestionCard(q, index);
-      listEl.appendChild(card);
-    });
-  } catch (err) {
-    loadingEl.innerHTML = `<p style="color: #ef4444;">Error loading questions: ${err.message}</p>`;
+  
+  if (!currentQuestions || currentQuestions.length === 0) {
+    emptyEl.style.display = "block";
+    return;
   }
+
+  emptyEl.style.display = "none";
+
+  currentQuestions.forEach((q, index) => {
+    const card = createQuestionCard(q, index);
+    listEl.appendChild(card);
+  });
 }
 
 function createQuestionCard(q, index) {
@@ -133,7 +126,7 @@ function createQuestionCard(q, index) {
   let selectedIdx = q.correct_option_id;
 
   let optionsHtml = q.options.map((opt, idx) => `
-    <label class="option-item ${selectedIdx === idx ? 'selected' : ''}" onclick="selectOption(${q.id}, ${idx})">
+    <label class="option-item ${selectedIdx === idx ? 'selected' : ''}" onclick="selectOption('${q.id}', ${idx})">
       <input type="radio" name="q_${q.id}" value="${idx}" ${selectedIdx === idx ? 'checked' : ''} />
       <div class="radio-custom"></div>
       <span class="option-text">${opt}</span>
@@ -145,7 +138,7 @@ function createQuestionCard(q, index) {
     <div class="options-group">
       ${optionsHtml}
     </div>
-    <button class="btn-send" id="btn-${q.id}" onclick="publishQuiz(${q.id})" ${selectedIdx === null ? 'disabled' : ''}>
+    <button class="btn-send" id="btn-${q.id}" onclick="publishQuiz('${q.id}')" ${selectedIdx === null ? 'disabled' : ''}>
       <span class="icon">🚀</span>
       <span class="text">Publish to Telegram</span>
     </button>
@@ -202,6 +195,9 @@ async function publishQuiz(qId) {
       btn.innerHTML = `<span class="icon">✅</span><span class="text">Published!</span>`;
       card.style.borderColor = "var(--success-color)";
       
+      // Remove from memory
+      currentQuestions = currentQuestions.filter(q => q.id !== qId);
+      
       // Animate out
       setTimeout(() => {
         card.style.opacity = '0';
@@ -210,8 +206,7 @@ async function publishQuiz(qId) {
       }, 1000);
       
       // Check if any cards left
-      const remainingCards = document.querySelectorAll(".question-card");
-      if (remainingCards.length <= 1) {
+      if (currentQuestions.length === 0) {
           setTimeout(() => {
               document.getElementById("empty-state").style.display = "block";
           }, 1000);
