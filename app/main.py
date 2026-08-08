@@ -53,6 +53,9 @@ async def get_ptb_app():
         _bot_initialized = True
     return ptb
 
+class ParseRequest(BaseModel):
+    raw_text: str
+
 class PublishRequest(BaseModel):
     question_id: Optional[str] = None
     correct_option_id: int
@@ -69,7 +72,6 @@ async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     
-    # Save temporarily (Vercel allows writing to /tmp)
     os.makedirs("/tmp/uploads", exist_ok=True)
     file_path = f"/tmp/uploads/{file.filename}"
     
@@ -78,20 +80,26 @@ async def upload_pdf(file: UploadFile = File(...)):
         
     try:
         raw_text = extract_text_from_pdf(file_path)
-        parsed_questions = parse_mcqs_with_gemini(raw_text)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error extracting PDF: {str(e)}")
     finally:
-        # Clean up temp file
         try:
             os.remove(file_path)
         except:
             pass
             
-    if not parsed_questions:
-        raise HTTPException(status_code=400, detail="Failed to extract questions. Please verify PDF format.")
+    if not raw_text.strip():
+        raise HTTPException(status_code=400, detail="No text could be extracted from PDF.")
         
-    # Assign unique IDs to questions so the frontend can track them
+    return {"status": "success", "raw_text": raw_text}
+
+@app.post("/api/parse-text")
+async def parse_text(req: ParseRequest):
+    try:
+        parsed_questions = parse_mcqs_with_gemini(req.raw_text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
+        
     for q in parsed_questions:
         q['id'] = str(uuid.uuid4())
         
@@ -103,7 +111,6 @@ async def publish_quiz(req: PublishRequest):
     if not target_chat:
         raise HTTPException(status_code=400, detail="Target Chat ID is required.")
 
-    # Validate option strings for Telegram API constraints
     cleaned_options = [opt[:100] for opt in req.options]
 
     try:
