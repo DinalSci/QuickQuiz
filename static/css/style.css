@@ -227,6 +227,10 @@ h3 {
   line-height: 1.6;
   margin-bottom: 16px;
   color: #fff;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  border: 1px solid transparent;
 }
 
 .options-group {
@@ -236,26 +240,27 @@ h3 {
   margin-bottom: 20px;
 }
 
-.option-item {
+.option-row {
   display: flex;
   align-items: center;
-  padding: 14px 18px;
+  padding: 10px 14px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 12px;
-  cursor: pointer;
   transition: all 0.25s ease;
-  position: relative;
-  overflow: hidden;
 }
 
-.option-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+.option-row.selected-row {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--accent-color);
 }
 
-.option-item input {
-  display: none;
+.radio-container {
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .radio-custom {
@@ -281,22 +286,34 @@ h3 {
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.option-item.selected {
-  background: rgba(99, 102, 241, 0.1);
+.radio-custom.selected {
   border-color: var(--accent-color);
 }
-
-.option-item.selected .radio-custom {
-  border-color: var(--accent-color);
-}
-
-.option-item.selected .radio-custom::after {
+.radio-custom.selected::after {
   transform: scale(1);
 }
 
 .option-text {
   font-size: 1rem;
   color: #e2e8f0;
+  flex-grow: 1;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  border: 1px solid transparent;
+}
+
+/* Editing Styles */
+[contenteditable="true"]:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  cursor: text;
+}
+
+[contenteditable="true"]:focus {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--accent-color);
+  outline: none;
 }
 
 .btn-send {
