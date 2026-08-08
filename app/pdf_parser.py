@@ -23,7 +23,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 
 def parse_pdf_with_gemini_file_api(pdf_path: str):
     """Upload PDF directly to Gemini File API and extract MCQs. Best for scanned PDFs."""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3.5-flash')
 
     print(f"Uploading PDF to Gemini File API: {pdf_path}")
     uploaded_file = genai.upload_file(path=pdf_path, mime_type="application/pdf")
