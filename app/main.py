@@ -1,5 +1,4 @@
 import os
-import asyncio
 import uuid
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
@@ -7,16 +6,16 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from telegram import Bot, Update
+from telegram import Update
 from telegram.ext import Application, CommandHandler
 from dotenv import load_dotenv
 
 from app.bot import start_command
-from app.pdf_parser import extract_text_from_pdf, parse_mcqs_with_gemini, parse_pdf_with_gemini_file_api
 
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-WEBHOOK_URL = f"{os.getenv('WEBAPP_URL')}/api/webhook"
+WEBAPP_URL = os.getenv("WEBAPP_URL", "")
+WEBHOOK_URL = f"{WEBAPP_URL}/api/webhook"
 
 app = FastAPI(title="PDF to Telegram Quiz WebApp (Stateless)")
 
@@ -32,11 +31,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "app/templates"))
 
-# Initialize PTB Application
 ptb = (
-    Application.builder()
-    .token(TOKEN)
-    .build()
+    Application.builder().token(TOKEN).build()
 ) if TOKEN else None
 
 if ptb:
@@ -53,8 +49,6 @@ async def get_ptb_app():
         _bot_initialized = True
     return ptb
 
-class ParseRequest(BaseModel):
-    raw_text: str
 
 class PublishRequest(BaseModel):
     question_id: Optional[str] = None
@@ -63,61 +57,19 @@ class PublishRequest(BaseModel):
     options: List[str]
     target_chat_id: Optional[str] = None
 
+
 @app.get("/")
 def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/api/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    
-    os.makedirs("/tmp/uploads", exist_ok=True)
-    file_path = f"/tmp/uploads/{file.filename}"
-    
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-        
-    try:
-        # Try text extraction first (fast for text-based PDFs)
-        raw_text = extract_text_from_pdf(file_path)
-        
-        if len(raw_text) < 100:
-            # PDF is scanned/image-based — use Gemini File API directly
-            print("Scanned PDF detected. Using Gemini File API...")
-            questions = parse_pdf_with_gemini_file_api(file_path)
-            for q in questions:
-                q['id'] = str(uuid.uuid4())
-            return {
-                "status": "success",
-                "mode": "file_api",
-                "count": len(questions),
-                "questions": questions
-            }
-        else:
-            # Text-based PDF — return raw text for browser-side chunking
-            return {"status": "success", "mode": "text", "raw_text": raw_text}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
-    finally:
-        try:
-            os.remove(file_path)
-        except:
-            pass
+@app.get("/api/config")
+def get_config():
+    """Returns safe client-side config (Gemini API key for browser-side calls)."""
+    return {
+        "gemini_api_key": os.getenv("GEMINI_API_KEY", ""),
+    }
 
-
-@app.post("/api/parse-text")
-async def parse_text(req: ParseRequest):
-    try:
-        parsed_questions = parse_mcqs_with_gemini(req.raw_text)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
-        
-    for q in parsed_questions:
-        q['id'] = str(uuid.uuid4())
-        
-    return {"status": "success", "count": len(parsed_questions), "questions": parsed_questions}
 
 @app.post("/api/publish-quiz")
 async def publish_quiz(req: PublishRequest):
@@ -131,17 +83,16 @@ async def publish_quiz(req: PublishRequest):
         app_instance = await get_ptb_app()
         poll_msg = await app_instance.bot.send_poll(
             chat_id=target_chat,
-            question=req.question_text[:300],  # Telegram question limit
+            question=req.question_text[:300],
             options=cleaned_options,
             type="quiz",
             correct_option_id=req.correct_option_id,
             is_anonymous=True
         )
-
         return {"status": "success", "message_id": poll_msg.message_id}
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/webhook")
 async def process_webhook(request: Request):
@@ -155,13 +106,14 @@ async def process_webhook(request: Request):
         print("Error processing webhook:", e)
         return {"ok": False}
 
+
 @app.get("/api/set-webhook")
 async def set_webhook():
     try:
         app_instance = await get_ptb_app()
-        if os.getenv('WEBAPP_URL'):
+        if WEBAPP_URL:
             await app_instance.bot.set_webhook(WEBHOOK_URL)
-            return {"status": f"Webhook successfully set to {WEBHOOK_URL}"}
+            return {"status": f"Webhook set to {WEBHOOK_URL}"}
         return {"status": "WEBAPP_URL not configured"}
     except Exception as e:
         return {"error": str(e)}
