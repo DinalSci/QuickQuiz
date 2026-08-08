@@ -85,11 +85,15 @@ async function handleFiles(files) {
 }
 
 async function processTextInChunks(rawText, statusText, statusEl, dropZone) {
-    const chunkSize = 3500;
+    // Larger chunks = more context per call = better question detection
+    // Overlap prevents questions from being cut at chunk boundaries
+    const chunkSize = 15000;
+    const overlap   = 1000;
     const chunks = [];
     
-    for (let i = 0; i < rawText.length; i += chunkSize) {
+    for (let i = 0; i < rawText.length; i += chunkSize - overlap) {
         chunks.push(rawText.slice(i, i + chunkSize));
+        if (i + chunkSize >= rawText.length) break;
     }
     
     let totalFound = 0;
@@ -109,12 +113,17 @@ async function processTextInChunks(rawText, statusText, statusEl, dropZone) {
             console.log("Chunk", i, "response:", data);
             
             if (res.ok && data.questions && data.questions.length > 0) {
-                totalFound += data.questions.length;
-                // Append new questions to existing array and DOM
-                data.questions.forEach((q, idx) => {
-                    currentQuestions.push(q);
-                    const card = createQuestionCard(q, currentQuestions.length - 1);
-                    listEl.appendChild(card);
+                data.questions.forEach((q) => {
+                    // Deduplicate: skip if same question text already added
+                    const isDuplicate = currentQuestions.some(
+                        existing => existing.question_text.trim().slice(0,60) === q.question_text.trim().slice(0,60)
+                    );
+                    if (!isDuplicate) {
+                        totalFound += 1;
+                        currentQuestions.push(q);
+                        const card = createQuestionCard(q, currentQuestions.length - 1);
+                        listEl.appendChild(card);
+                    }
                 });
                 statusText.innerText = `Found ${totalFound} questions so far... (part ${i+1}/${chunks.length})`;
             }
