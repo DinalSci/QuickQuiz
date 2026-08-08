@@ -70,14 +70,36 @@ async function handleFiles(files) {
     const result = await response.json();
     
     if (response.ok) {
-      statusText.innerText = "Text extracted! Processing with Gemini AI...";
-      
-      // Process chunks
-      const rawText = result.raw_text;
-      await processTextInChunks(rawText, statusText, statusEl, dropZone);
-      
+      if (result.mode === "file_api") {
+        // Scanned PDF — questions already extracted by Gemini File API
+        statusText.innerText = `Successfully extracted ${result.questions.length} questions!`;
+        statusEl.style.color = "var(--success-color)";
+        statusEl.querySelector(".spinner").style.display = "none";
+        
+        currentQuestions = result.questions;
+        const listEl = document.getElementById("questions-list");
+        result.questions.forEach((q, i) => {
+          const card = createQuestionCard(q, i);
+          listEl.appendChild(card);
+        });
+
+        setTimeout(() => {
+          dropZone.style.display = "flex";
+          statusEl.style.display = "none";
+          statusEl.style.color = "#e2e8f0";
+          statusEl.querySelector(".spinner").style.display = "block";
+          document.getElementById("pdf-upload").value = "";
+          if (result.questions.length === 0) {
+            document.getElementById("empty-state").style.display = "block";
+          }
+        }, 2500);
+      } else {
+        // Text-based PDF — chunk and send to Gemini
+        statusText.innerText = "Text extracted! Processing with Gemini AI...";
+        await processTextInChunks(result.raw_text, statusText, statusEl, dropZone);
+      }
     } else {
-      throw new Error(result.detail || "Failed to extract PDF text.");
+      throw new Error(result.detail || "Failed to process PDF.");
     }
   } catch (error) {
     showError(error.message, statusText, statusEl, dropZone);
