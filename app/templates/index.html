@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Premium Quiz Creator Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="background-blob"></div>
+  <div class="background-blob secondary"></div>
+  
+  <div class="container">
+    <header class="glass-panel">
+      <div class="header-icon">✨</div>
+      <h2>Quiz Dashboard</h2>
+      <p>Upload a PDF to extract MCQ questions and publish them to Telegram instantly.</p>
+    </header>
+
+    <!-- Upload Section -->
+    <div id="upload-section" class="glass-panel">
+      <h3>1. Upload PDF Paper</h3>
+      <div class="upload-area" id="drop-zone">
+        <div class="upload-icon">📄</div>
+        <p>Drag & drop your PDF here or click to browse</p>
+        <input type="file" id="pdf-upload" accept="application/pdf" hidden />
+        <button class="btn-outline" onclick="document.getElementById('pdf-upload').click()">Select PDF</button>
+      </div>
+      <div id="upload-status" class="upload-status" style="display: none;">
+        <div class="spinner inline-spinner"></div>
+        <span id="upload-status-text">Processing PDF via Gemini AI...</span>
+      </div>
+    </div>
+
+    <!-- Review Section -->
+    <div id="review-section">
+      <h3 class="section-title">2. Review & Publish</h3>
+      
+      <div id="loading" class="loading-container glass-panel" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading questions...</p>
+      </div>
+      
+      <div id="empty-state" class="empty-state glass-panel">
+        <div class="empty-icon">🎉</div>
+        <h3>All Caught Up!</h3>
+        <p>Upload a new PDF to extract more questions.</p>
+      </div>
+
+      <div id="questions-list"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
