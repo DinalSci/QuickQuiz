@@ -17,7 +17,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     return extracted_text
 
 def parse_mcqs_with_gemini(raw_text: str):
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3.5-flash')
     
     prompt = f"""
 You are an expert educational content parser specializing in Sinhala and English MCQ exam papers.
