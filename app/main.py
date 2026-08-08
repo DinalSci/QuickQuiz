@@ -12,7 +12,7 @@ from telegram.ext import Application, CommandHandler
 from dotenv import load_dotenv
 
 from app.bot import start_command
-from app.pdf_parser import extract_text_from_pdf, parse_mcqs_with_gemini
+from app.pdf_parser import extract_text_from_pdf, parse_mcqs_with_gemini, parse_pdf_with_gemini_file_api
 
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -79,19 +79,33 @@ async def upload_pdf(file: UploadFile = File(...)):
         f.write(await file.read())
         
     try:
+        # Try text extraction first (fast for text-based PDFs)
         raw_text = extract_text_from_pdf(file_path)
+        
+        if len(raw_text) < 100:
+            # PDF is scanned/image-based — use Gemini File API directly
+            print("Scanned PDF detected. Using Gemini File API...")
+            questions = parse_pdf_with_gemini_file_api(file_path)
+            for q in questions:
+                q['id'] = str(uuid.uuid4())
+            return {
+                "status": "success",
+                "mode": "file_api",
+                "count": len(questions),
+                "questions": questions
+            }
+        else:
+            # Text-based PDF — return raw text for browser-side chunking
+            return {"status": "success", "mode": "text", "raw_text": raw_text}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error extracting PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
     finally:
         try:
             os.remove(file_path)
         except:
             pass
-            
-    if not raw_text.strip():
-        raise HTTPException(status_code=400, detail="No text could be extracted from PDF.")
-        
-    return {"status": "success", "raw_text": raw_text}
+
 
 @app.post("/api/parse-text")
 async def parse_text(req: ParseRequest):
