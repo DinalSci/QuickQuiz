@@ -93,9 +93,10 @@ async function processTextInChunks(rawText, statusText, statusEl, dropZone) {
     }
     
     let totalFound = 0;
+    const listEl = document.getElementById("questions-list");
     
     for (let i = 0; i < chunks.length; i++) {
-        statusText.innerText = `Processing part ${i + 1} of ${chunks.length} via Gemini AI...`;
+        statusText.innerText = `Processing part ${i + 1} of ${chunks.length} with Gemini AI...`;
         
         try {
             const res = await fetch("/api/parse-text", {
@@ -105,19 +106,26 @@ async function processTextInChunks(rawText, statusText, statusEl, dropZone) {
             });
             
             const data = await res.json();
+            console.log("Chunk", i, "response:", data);
             
             if (res.ok && data.questions && data.questions.length > 0) {
                 totalFound += data.questions.length;
-                currentQuestions = currentQuestions.concat(data.questions);
-                renderQuestions();
+                // Append new questions to existing array and DOM
+                data.questions.forEach((q, idx) => {
+                    currentQuestions.push(q);
+                    const card = createQuestionCard(q, currentQuestions.length - 1);
+                    listEl.appendChild(card);
+                });
+                statusText.innerText = `Found ${totalFound} questions so far... (part ${i+1}/${chunks.length})`;
             }
         } catch (e) {
             console.error("Error processing chunk", i, e);
         }
     }
     
-    statusText.innerText = `Finished! Extracted ${totalFound} questions.`;
-    statusEl.style.color = "var(--success-color)";
+    const finalMsg = totalFound > 0 ? `Successfully extracted ${totalFound} questions!` : "No questions found. Try a different PDF.";
+    statusText.innerText = finalMsg;
+    statusEl.style.color = totalFound > 0 ? "var(--success-color)" : "#ef4444";
     statusEl.querySelector(".spinner").style.display = "none";
     
     setTimeout(() => {
@@ -150,7 +158,6 @@ function showError(msg, statusText, statusEl, dropZone) {
 function renderQuestions() {
   const listEl = document.getElementById("questions-list");
   listEl.innerHTML = "";
-  
   currentQuestions.forEach((q, index) => {
     const card = createQuestionCard(q, index);
     listEl.appendChild(card);
